@@ -3,9 +3,10 @@ import type { Booking } from '../types'
 import { formatDay, formatTime } from '../format'
 
 defineProps<{ bookings: Booking[] }>()
-defineEmits<{ cancel: [booking: Booking] }>()
+defineEmits<{ confirm: [booking: Booking]; cancel: [booking: Booking] }>()
 
-const canCancel = (b: Booking) => b.status === 'confirmed' || b.status === 'pending'
+const canConfirm = (b: Booking) => b.status === 'pending'
+const canCancel = (b: Booking) => b.status === 'pending' || b.status === 'confirmed'
 </script>
 
 <template>
@@ -24,6 +25,7 @@ const canCancel = (b: Booking) => b.status === 'confirmed' || b.status === 'pend
         </div>
         <div class="booking__right">
           <span class="badge" :class="`badge--${b.status}`">{{ b.status }}</span>
+          <button v-if="canConfirm(b)" class="linkbtn" @click="$emit('confirm', b)">Confirm</button>
           <button v-if="canCancel(b)" class="linkbtn" @click="$emit('cancel', b)">Cancel</button>
         </div>
       </div>

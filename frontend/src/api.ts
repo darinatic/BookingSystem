@@ -32,6 +32,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ slot_id: slotId, patient_id: patientId }),
     }),
+  confirm: (bookingId: string) =>
+    request<Booking>(`/bookings/${bookingId}/confirm`, { method: 'POST' }),
   cancel: (bookingId: string) =>
     request<Booking>(`/bookings/${bookingId}/cancel`, { method: 'POST' }),
 }

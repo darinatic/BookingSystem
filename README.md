@@ -1,44 +1,50 @@
-# GoDoc — Consultation Booking System
+# GoDoc Consultation Booking System
 
-A simplified end-to-end consultation booking flow: a patient views a doctor's open
-slots and books one, with **correct behaviour under concurrent booking attempts** as the
-central design goal. Built for the GoDoc take-home (Scope 1).
+A small end-to-end consultation booking flow. A patient views a doctor's open slots and
+books one, and the system stays correct when two people try to grab the same slot at the
+same time. Built for the GoDoc take-home (Scope 1).
 
-- **Frontend:** Vue 3 + Vite + TypeScript (single-page app)
-- **Backend:** FastAPI (Python), thin service layer
-- **Database:** Supabase (Postgres), accessed via `supabase-py`
+Postgres does the heavy lifting for correctness, FastAPI holds the business rules, and Vue is
+a light UI on top. The frontend never talks to Supabase directly, so the database key stays on
+the server and there is one place where the rules live.
 
-```
-Vue 3 SPA  ──HTTP/JSON──▶  FastAPI  ──supabase-py──▶  Supabase Postgres
- pick patient/doctor,       routes + booking          schema is the source of
- book / cancel slots        service + state machine    truth for correctness
-```
+## Tech stack
 
-The frontend never talks to Supabase directly — all data flows through the API, so the
-database key stays server-side and the backend is the single place business rules live.
+- **Postgres (Supabase)** because the core problem is correctness under concurrency, and a
+  relational database with unique constraints solves that declaratively. Supabase gives managed
+  Postgres with no setup. Trade-off: we lean on a hosted service instead of running our own DB.
+- **FastAPI** for a small, fast Python backend that keeps the booking rules and state machine
+  in one testable place and keeps the database key off the browser. Trade-off: it adds a hop a
+  browser-to-Supabase setup would not have, worth it for the clean seam.
+- **supabase-py** as the official client, using the provided key with minimal setup. Trade-off:
+  it goes through PostgREST rather than a raw connection, so there are no hand-rolled SQL
+  transactions, which we do not need here because correctness lives in a constraint.
+- **Vue 3 + Vite + TypeScript** for a light single-page app that pairs well with a separate API.
+  The brief calls for a modern JS framework, and Vue keeps the footprint small for a UI this
+  size. Trade-off: a fuller framework like Next or Nuxt would overlap with the Python backend and
+  add redundancy here.
+- **Render** for deployment because it has a usable free tier, deploys straight from a GitHub
+  repo, and reads a `render.yaml` blueprint to set up both services at once, with a simple
+  dashboard and logs. Trade-off: free instances cold start after a period of idle, so the first
+  request can be slow.
 
----
+## Architecture
 
-## Tech stack justification & trade-offs
+![Architecture](img/architecture.png)
 
-| Choice | Why | Trade-off considered |
-|---|---|---|
-| **Postgres (Supabase)** | The whole problem is *correctness under concurrency*. A relational DB with transactions and unique constraints solves double-booking declaratively. Supabase gives managed Postgres with zero setup. | A document store would push concurrency control into app code. Not worth it. |
-| **Partial unique index for correctness** | Double-booking is prevented by the database itself, not by application locks (see below). Simple, provably correct, scales horizontally. | Alternatives (`SELECT FOR UPDATE`, advisory locks, an RPC function) are heavier and hold locks; the index is declarative and lock-free. |
-| **FastAPI (thin backend)** | Owns validation and the booking **state machine** in one authoritative, testable place; keeps DB access off the client; is the natural seam for future features (accounts, offboarding, HRM sync). | We could let Vue hit Supabase directly. Rejected: it exposes the DB to the browser and scatters business rules into SQL/RLS. The backend is kept deliberately thin to avoid over-engineering. |
-| **supabase-py client** | Uses the provided publishable key, minimal setup, and the correctness guarantee lives in the schema — so a full ORM + direct connection buys little here. | SQLAlchemy + a direct connection would give richer transaction control, but we don't need it once correctness is a DB constraint. |
-| **Vue 3 + Vite (SPA)** | Lightweight, fast, and pairs cleanly with a separate API. The UI is small (pick doctor → pick slot → manage bookings). | Next.js/Nuxt would add SSR and server routes that overlap with the Python backend — redundant for this scope. |
+Both the FastAPI backend and the Vue frontend (served by nginx) run as Docker web services on
+Render, deployed straight from the GitHub repo via the `render.yaml` blueprint. The same
+containers run anywhere, including locally with `docker compose`. Supabase is a managed service
+outside Render.
 
----
+## Preventing double booking
 
-## The headline: preventing double-booking
+This is the part that matters most. If two requests both "check if the slot is free, then
+insert a booking", there is a window between the check and the insert where both see the
+slot as free and both write. That is a double booking.
 
-**The race:** two patients try to book the same slot at the same instant. A naive
-"check if free, then insert" has a gap between the check and the insert where both requests
-see the slot as free and both write.
-
-**The design:** slot availability is *derived*, not a mutable flag, and correctness is a
-**partial unique index** on the database:
+Instead of checking-then-writing, the database itself guarantees the rule with a partial
+unique index:
 
 ```sql
 create unique index one_active_booking_per_slot
@@ -46,109 +52,108 @@ create unique index one_active_booking_per_slot
   where status in ('pending', 'confirmed');
 ```
 
-Booking is therefore a single atomic `INSERT`. When two inserts race for the same slot,
-Postgres serializes them on the index: **exactly one commits**; the other raises
-`23505` (unique violation), which the backend catches and returns as **HTTP 409 Conflict**.
+Creating a booking is a single atomic `INSERT` (a short pending hold). When two inserts race
+for the same slot, Postgres serializes them on that index. Exactly one commits. The other one
+fails with a unique violation (Postgres error `23505`), which the backend catches and turns
+into an HTTP `409`.
 
-Why this is the right shape:
-- **No application locks.** No `SELECT FOR UPDATE`, no advisory locks, no coordination
-  between backend instances. The database is the single source of truth, so the API layer
-  stays stateless and scales horizontally — N backend replicas remain correct.
-- **Immune to app bugs.** Even if the service logic were wrong, the constraint makes a
-  double-booking physically impossible.
-- **Rebooking still works.** The index only covers *active* statuses, so once a booking is
-  `cancelled` the slot is free again (verified by tests).
+![Two patients racing for the same slot](img/concurrency.png)
 
-This is proven by an automated test that fires N concurrent bookings at one slot and asserts
-exactly one success + N−1 conflicts (`backend/tests/test_concurrency.py`).
+A few reasons this is the shape I went with:
 
-**Alternatives considered:** `SELECT ... FOR UPDATE` (classic, but holds a row lock and needs
-direct-transaction control); a plpgsql `book_slot()` RPC (correct, but more moving parts).
-The partial unique index gives the same guarantee with the least machinery.
+- There are no application locks. The database is the single source of truth, so you
+  can run several copies of the API and they all stay correct.
+- It cannot be defeated by a bug in the service code. Even a wrong code path cannot create a
+  second active booking, because the constraint won't allow it.
+- Rebooking still works. The index only covers active bookings, so once a booking is
+  cancelled the slot is free again.
 
----
+There is a test that proves this: it fires many concurrent bookings at one slot and checks
+that exactly one succeeds and the rest get a conflict (`backend/tests/test_concurrency.py`).
 
-## Booking state machine
+## Booking states
 
-States: `pending`, `confirmed`, `cancelled`, `completed`. Transitions are enforced in one
-place (`backend/app/state_machine.py`):
+A booking moves through `pending`, `confirmed`, `cancelled`, or `completed`. Valid transitions
+are enforced in one place (`backend/app/state_machine.py`), and an illegal move (for example
+completing a cancelled booking) is rejected with a `409`.
 
-```
-confirmed ──cancel──▶ cancelled        (terminal)
-confirmed ──complete─▶ completed        (terminal)
-pending   ──confirm──▶ confirmed        (modeled, not exercised — see assumptions)
-pending   ──cancel───▶ cancelled
-```
+![Booking state](img/booking-state.png)
 
-Bookings are created directly as `confirmed`. `pending` exists in the schema and transition
-table for a future payment/hold flow but is never entered in this build. Transitions are
-applied with a compare-and-swap (`update ... where status = <current>`) so a concurrent
-status change conflicts rather than silently overwrites.
+Booking is a two-step flow. Selecting a slot creates a short `pending` hold (ten minutes) that
+reserves the slot right away, so nobody else can take it while the patient confirms. Confirming
+moves it to `confirmed`. Releasing or cancelling frees the slot. Payment is not part of this,
+since the clinic bills after the consultation, so the hold is just there to make the booking
+step safe.
 
----
+Abandoned holds are freed by lazy expiry: before listing availability or creating a booking,
+any `pending` row past its `expires_at` is cancelled, so the slot reappears the moment someone
+looks again. Transitions use a compare-and-swap (`update ... where status = <current>`) so a
+concurrent change conflicts instead of quietly overwriting.
 
-## Data model
+## Database
 
-```
-doctors  (id, name, specialty)
-patients (id, name, email)
-slots    (id, doctor_id → doctors, start_time, end_time)   -- check end_time > start_time
-bookings (id, slot_id → slots, patient_id → patients, status, created_at, updated_at)
-```
+![Database schema](img/database.png)
 
-- A **slot is available** when no active (`pending`/`confirmed`) booking references it —
-  availability is derived, never a stored flag that could drift.
-- `updated_at` is maintained by a DB trigger (`moddatetime`).
-- Full schema and seed data: [`db/001_schema.sql`](db/001_schema.sql),
+- `doctors`, `patients`, `slots`, and `bookings`, with foreign keys as shown.
+- A slot is available when no active (`pending` or `confirmed`) booking points at it.
+  Availability is worked out from the data, not stored as a flag that could drift.
+- `bookings.expires_at` is the deadline for a `pending` hold. Expired holds are cancelled
+  lazily on the next read or booking.
+- `updated_at` on `bookings` is maintained by a database trigger (`moddatetime`).
+- The full schema and seed data live in [`db/001_schema.sql`](db/001_schema.sql) and
   [`db/002_seed.sql`](db/002_seed.sql).
 
----
-
-## API reference
+## API
 
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/doctors` | List doctors |
 | `GET` | `/doctors/{id}/slots` | Available slots for a doctor |
 | `GET` | `/patients` | List patients (stands in for login) |
-| `GET` | `/patients/{id}/bookings` | A patient's bookings (with slot + doctor) |
-| `POST` | `/bookings` | Book a slot `{slot_id, patient_id}` → `201`, or `409` if taken |
-| `POST` | `/bookings/{id}/cancel` | `confirmed → cancelled` |
-| `POST` | `/bookings/{id}/complete` | `confirmed → completed` |
+| `GET` | `/patients/{id}/bookings` | A patient's bookings, with slot and doctor |
+| `POST` | `/bookings` | Hold a slot `{slot_id, patient_id}`, creates a `pending` hold, `201` or `409` if taken |
+| `POST` | `/bookings/{id}/confirm` | `pending` to `confirmed`, `409` if the hold expired |
+| `POST` | `/bookings/{id}/cancel` | `pending` or `confirmed` to `cancelled` |
+| `POST` | `/bookings/{id}/complete` | `confirmed` to `completed` |
 | `GET` | `/health` | Liveness |
 
-Error codes: `404` (unknown slot/patient/booking), `409` (slot already booked, or invalid
-state transition), `422` (request body validation).
+Error codes: `404` for an unknown slot, patient, or booking, `409` for a slot that is
+already booked or an invalid state transition, and `422` for a bad request body. Interactive
+docs are at `/docs` when the backend is running.
 
-Interactive docs at `http://127.0.0.1:8000/docs` when the backend is running.
+## Running locally
 
----
+The Supabase project is already set up and its credentials are committed in `backend/.env` and
+`frontend/.env`, so there is nothing to configure. You can run it with Docker, or directly with
+Python and Node.
 
-## Setup & run locally
+### With Docker
 
-Prerequisites: Python 3.11+, Node 18+. The Supabase project is already provisioned and its
-credentials are committed in `backend/.env` and `frontend/.env` (per the assessment's
-instruction to commit the env vars — see the note under Limitations).
+From the repo root, build and start both containers:
 
-### 1. Database (already applied; re-run only to reset)
+```bash
+docker compose up --build
+```
 
-The schema and seed have been applied to the linked Supabase project. To recreate from
-scratch, run [`db/001_schema.sql`](db/001_schema.sql) then [`db/002_seed.sql`](db/002_seed.sql)
-in the Supabase SQL editor.
+Then open `http://localhost:8080`. These are the same images that deploy to Render.
 
-### 2. Backend
+### Without Docker
+
+You need Python 3.11+ and Node 18+.
+
+Backend:
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/Scripts/activate      # Windows Git Bash;  use .venv/bin/activate on macOS/Linux
+source .venv/Scripts/activate      # Windows Git Bash. Use .venv/bin/activate on macOS or Linux
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-If port 8000 is taken, use another port and update `VITE_API_BASE_URL` in `frontend/.env`.
+If port 8000 is busy, use another port and update `VITE_API_BASE_URL` in `frontend/.env`.
 
-### 3. Frontend
+Frontend:
 
 ```bash
 cd frontend
@@ -156,52 +161,50 @@ npm install
 npm run dev
 ```
 
-Open the printed URL (default `http://localhost:5173`). Use the **Booking as** switcher to
-act as different patients.
+Open the printed URL. Use the "Booking as" switcher at the top to act as different patients.
 
-### Run tests
+The database schema and seed have already been applied to the Supabase project. To rebuild it
+from scratch, run [`db/001_schema.sql`](db/001_schema.sql) then
+[`db/002_seed.sql`](db/002_seed.sql) in the Supabase SQL editor.
+
+## Tests
 
 ```bash
 cd backend
 pytest
 ```
 
-Nine tests: the concurrency race (`test_concurrency.py`), state-machine transitions
-(`test_state_machine.py`), and booking/availability behaviour (`test_bookings.py`). Tests run
-against the real Supabase project (the race test is only meaningful against real Postgres) and
-clean up after themselves.
+Eleven tests cover the concurrency race (`test_concurrency.py`), the state machine
+(`test_state_machine.py`), and booking, hold expiry, and availability behaviour
+(`test_bookings.py`). They run against the real Supabase project, since the race test is only
+meaningful against a real Postgres, and they clean up after themselves. The same tests plus a
+frontend build run in CI on every push (`.github/workflows/tests.yml`).
 
----
+## Features: assumptions and limitations
 
-## Assumptions & known limitations
+**Slot booking and holds**
 
-- **No authentication.** A patient is chosen from a dropdown instead of logging in, to keep
-  focus on the booking mechanics. In production the `patient_id` would come from an auth token.
-- **RLS is disabled** on the tables, so the publishable key can read/write directly. This is
-  acceptable for a seeded demo but is **not production-safe** — production would enable Row
-  Level Security with policies, and the backend would use a server-side service key. The env
-  var is committed only because the assessment explicitly asks for it.
-- **`pending` / holds not exercised.** Bookings go straight to `confirmed`. A real flow would
-  create a `pending` hold, confirm after payment, and auto-expire abandoned holds (an
-  `expires_at` + sweep job) — the schema and state machine already accommodate this.
-- **Slot times are shown in UTC** so the demo always displays the seeded clinic hours
-  (09:00–16:00) regardless of the viewer's timezone.
-- **Transient transport errors aren't retried.** `supabase-py` uses a single shared HTTP/2
-  connection; a large concurrent burst over one connection can occasionally drop. This never
-  affects correctness (the DB constraint still guarantees one winner). Production hardening
-  would add retries and **idempotency keys** so a booking that succeeded at the DB but failed
-  in transit isn't misreported.
-- **Availability is computed in app code** (slots minus active bookings). At larger scale this
-  would move to a DB view or a single joined query.
+- The rule is one active booking per slot. It is enforced by a partial unique index, so it
+  holds even under concurrent requests.
+- A hold lasts ten minutes and is freed lazily. A slot can therefore stay held for up to a few
+  seconds past expiry, until the next read or booking sweeps it. A background job (for example
+  pg_cron) would tighten this at scale.
+- Slot times are shown in UTC so the demo always shows the seeded clinic hours (09:00 to 16:00)
+  regardless of the viewer's timezone.
 
----
+**Confirmation and cancellation**
 
-## Out of scope / what I'd build next
+- A patient confirms their own hold. There is no separate clinic approval step.
+- Payment is out of scope. The clinic bills after the consultation, so booking is not gated on
+  payment.
 
-- **Deployment** (bonus) — the app is deploy-ready (stateless API + static SPA); not deployed
-  to keep the submission focused.
-- **Scope 2 (documents)** and **Scope 3 (corporate accounts)** — not built. The backend's
-  layered structure (routes → service → DB) is where these would slot in: corporate accounts
-  as a self-referencing `parent_account_id` hierarchy, employee offboarding as a status change
-  that cancels active future bookings and revokes entitlements, and HRM integration as a webhook
-  that syncs employee status into that same offboarding path.
+**Identity**
+
+- No authentication. A patient is picked from a dropdown instead of logging in. In production
+  the `patient_id` would come from an auth token.
+
+**Availability**
+
+- The list of open slots is built in the backend by taking a doctor's slots and dropping the
+  ones that already have an active booking. That is a couple of small queries today. At larger
+  scale it would be a single database query or a view.

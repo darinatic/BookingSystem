@@ -38,7 +38,9 @@ create table public.bookings (
   id uuid primary key default gen_random_uuid(),
   slot_id uuid not null references public.slots(id),
   patient_id uuid not null references public.patients(id),
-  status public.booking_status not null default 'confirmed',
+  status public.booking_status not null default 'pending',
+  -- When a pending hold lapses. Expired holds are freed lazily on the next read/booking.
+  expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

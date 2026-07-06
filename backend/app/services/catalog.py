@@ -1,4 +1,5 @@
 from ..db import get_client
+from ..services.bookings import expire_holds
 from ..state_machine import ACTIVE_STATUSES
 
 
@@ -24,6 +25,7 @@ def list_available_slots(doctor_id: str) -> list[dict]:
         return []
 
     slot_ids = [s["id"] for s in slots]
+    expire_holds(client, slot_ids)
     taken_rows = (
         client.table("bookings")
         .select("slot_id")

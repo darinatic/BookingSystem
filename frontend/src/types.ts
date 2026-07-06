@@ -24,6 +24,7 @@ export interface Booking {
   slot_id: string
   patient_id: string
   status: BookingStatus
+  expires_at: string | null
   created_at: string
   slots?: {
     start_time: string
