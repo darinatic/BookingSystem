@@ -1,0 +1,368 @@
+:root {
+  --bg: #eef3f2;
+  --surface: #ffffff;
+  --surface-2: #f5faf9;
+  --ink: #13232b;
+  --muted: #5c7079;
+  --line: #dbe6e3;
+  --primary: #0e7a6e;
+  --primary-600: #0b6459;
+  --primary-tint: #e2f1ee;
+  --available: #157f5f;
+  --danger: #c2410c;
+  --danger-tint: #fbe9e0;
+  --amber: #b45309;
+  --amber-tint: #fbf1de;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 1px 2px rgba(16, 40, 50, 0.06), 0 10px 30px -16px rgba(16, 40, 50, 0.22);
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.app {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
+}
+
+/* Header */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0 26px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand__mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(150deg, var(--primary), var(--primary-600));
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 22px;
+  box-shadow: var(--shadow);
+}
+
+.brand__name {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.brand__tag {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: -2px;
+}
+
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 8px 7px 16px;
+  box-shadow: var(--shadow);
+}
+
+.switcher label {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.switcher select {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  border: none;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 7px 12px;
+}
+
+/* Layout */
+.grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.panel__head {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.panel__body {
+  padding: 12px;
+}
+
+/* Doctor list */
+.doctor {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.doctor:hover {
+  background: var(--surface-2);
+}
+
+.doctor--active {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+}
+
+.doctor__name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.doctor__specialty {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Slots */
+.day {
+  padding: 6px 6px 18px;
+}
+
+.day__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 8px 6px 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.day__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 0 6px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 9px 15px;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, border-color 0.12s, transform 0.06s;
+}
+
+.chip:hover {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+}
+
+.chip:active {
+  transform: translateY(1px);
+}
+
+.chip:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: capitalize;
+}
+
+.badge--confirmed {
+  background: var(--primary-tint);
+  color: var(--primary-600);
+}
+
+.badge--completed {
+  background: #e6f1ea;
+  color: #1f6b48;
+}
+
+.badge--cancelled {
+  background: #eef2f1;
+  color: var(--muted);
+}
+
+.badge--pending {
+  background: var(--amber-tint);
+  color: var(--amber);
+}
+
+/* Booking rows */
+.booking {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.booking:last-child {
+  border-bottom: none;
+}
+
+.booking__when {
+  font-weight: 700;
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking__who {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.booking__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.linkbtn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.linkbtn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-tint);
+}
+
+/* Toast / inline message */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.toast--error {
+  background: var(--danger);
+}
+
+/* Section spacing */
+.section {
+  margin-top: 26px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 26px 16px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
