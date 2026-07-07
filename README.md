@@ -2,7 +2,10 @@
 
 [![Live demo](https://img.shields.io/badge/Live%20demo-open%20app-0e7a6e?logo=render&logoColor=white)](https://godoc-booking-web.onrender.com/)
 
-_On Render's free tier, so the first load can take up to a minute while the services wake._
+> [!NOTE]
+> The demo runs on Render's free tier, so both services sleep after a period of inactivity. The
+> first visit can take up to a minute to wake them, and if the page loads before the API is awake
+> it may briefly show no doctors or slots. Give it a moment and refresh.
 
 ![App Screenshot](img/app-screenshot.PNG)
 
