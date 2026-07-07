@@ -7,7 +7,7 @@
 > first visit can take up to a minute to wake them, and if the page loads before the API is awake
 > it may briefly show no doctors or slots. Give it a moment and refresh.
 
-![App Screenshot](img/app-screenshot.PNG)
+<img src="img/app-screenshot.PNG" width="75%">
 
 A small end-to-end consultation booking flow. A patient views a doctor's open slots and
 books one, and the system stays correct when two people try to grab the same slot at the
@@ -44,7 +44,8 @@ system would only offer future slots).
 
 ## Architecture
 
-![Architecture](img/architecture.png)
+
+<img src="img/architecture.png" width="50%">
 
 Both the FastAPI backend and the Vue frontend (served by nginx) run as Docker web services on
 Render, deployed straight from the GitHub repo via the `render.yaml` blueprint. The same
@@ -113,7 +114,7 @@ availability query only consider active bookings, and a cleanup job would prune 
 
 ## Database
 
-![Database schema](img/database.png)
+<img src="img/database.png" width="50%">
 
 - `doctors`, `patients`, `slots`, and `bookings`, with foreign keys as shown.
 - A slot is available when no active (`pending` or `confirmed`) booking points at it.
@@ -170,7 +171,7 @@ Backend:
 ```bash
 cd backend
 python -m venv .venv
-source .venv/Scripts/activate      # Windows Git Bash. Use .venv/bin/activate on macOS or Linux
+.venv/Scripts/activate     
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
