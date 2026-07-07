@@ -8,7 +8,7 @@ from ..errors import NotFoundError, SlotUnavailableError
 from ..state_machine import validate_transition
 
 UNIQUE_VIOLATION = "23505"
-HOLD_MINUTES = 10
+HOLD_MINUTES = 5
 
 
 def _now() -> datetime:
