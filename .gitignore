@@ -1,4 +1,3 @@
-# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -6,12 +5,10 @@ venv/
 .pytest_cache/
 .mypy_cache/
 
-# Node / frontend
 node_modules/
 dist/
 *.local
 
-# Claude Code
 .claude/
 CLAUDE.md
 CLAUDE.local.md
@@ -19,9 +16,7 @@ plans/
 .playwright-mcp/
 .mcp.json
 
-# Assessment source (not part of the deliverable)
 *.pdf
 
-# OS
 .DS_Store
 Thumbs.db
